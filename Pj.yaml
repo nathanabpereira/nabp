@@ -142,17 +142,18 @@ data:
   MYSQL_DATABASE: wordpress
 
 ---
+---
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: wordpress-ingress
   namespace: wp-projeto
 spec:
+  externalTrafficPolicy: Local # Optional, but recommended for internal clusters
   rules:
-  - host: wordpress.example.com
+  - host: "${WORDPRESS_HOST}.sslip.io"  # Use environment variable for host
     http:
       paths:
       - backend:
           serviceName: wordpress
           servicePort: 80
-          port: 80
