@@ -154,5 +154,5 @@ spec:
       paths:
       - backend:
           serviceName: wordpress
-          servicePort: 8080
+          servicePort: 80
           port: 80
