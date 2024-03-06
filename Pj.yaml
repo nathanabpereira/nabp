@@ -204,7 +204,7 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
-  - host: wordpress.sslip.io
+  - host: "wordpress.sslip.io"
     http:
       paths:
       - path: /
