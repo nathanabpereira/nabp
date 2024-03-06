@@ -146,7 +146,4 @@ data:
 ---
 # Cria um ConfigMap para armazenar variáveis de configuração do MySQL
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mysql-config
-  namespace: wp-projeto
+kind: Config
