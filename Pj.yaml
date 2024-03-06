@@ -1,63 +1,45 @@
----
-# Cria um namespace para o projeto
 apiVersion: v1
 kind: Namespace
 metadata:
   name: wp-projeto
 
 ---
-# Cria um Deployment para o Wordpress com 3 réplicas
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: wordpress
-  namespace: wp-projeto
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: wordpress
-  template:
-    metadata:
-      labels:
-        app: wordpress
-    spec:
-      # Define o container do Wordpress
-      containers:
-      - name: wordpress
-        image: wordpress:5.4-php7.2-apache
-        envFrom:
-        - secretRef:
-            name: wordpress-env
-        - configMapRef:
-            name: wordpress-config
-        volumeMounts:
-        - name: wordpress-content
-          mountPath: /var/www/html
-          subPath: ""
-      # Define o volume persistente para o conteúdo do Wordpress
-      volumes:
-      - name: wordpress-content
-        persistentVolumeClaim:
-          claimName: wordpress-content-pvc
 
----
-# Cria um PersistentVolumeClaim para o Wordpress
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ConfigMap
 metadata:
-  name: wordpress-content-pvc
+  name: wordpress-config
   namespace: wp-projeto
-spec:
-  storageClassName: longhorn
-  accessModes:
-  - ReadWriteMany
-  resources:
-    requests:
-      storage: 1Gi
+data:
+  WORDPRESS_DB_USER: "wordpressuser"
+  WORDPRESS_DB_NAME: "wordpressdb"
+  WORDPRESS_DB_HOST: "mysql-service.wp-projeto"
 
 ---
-# Cria um StatefulSet para o MySQL com 1 réplica
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: wp-projeto
+data:
+  MYSQL_USER: "mysqluser"
+  MYSQL_DATABASE: "mysqldb"
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: wp-projeto
+type: Opaque
+data:
+  MYSQL_ROOT_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
+  MYSQL_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
+
+---
+
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -74,76 +56,161 @@ spec:
       labels:
         app: mysql
     spec:
-      # Define o container do MySQL
       containers:
       - name: mysql
         image: mysql:5.6
-        envFrom:
-        - secretRef:
-            name: mysql-env
-        - configMapRef:
-            name: mysql-config
+        env:
+        - name: MYSQL_USER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: MYSQL_DATABASE
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        ports:
+        - containerPort: 3306
         volumeMounts:
-        - name: mysql-data
+        - name: mysql-persistent-storage
           mountPath: /var/lib/mysql
-          subPath: ""
-      # Define o volume persistente para o banco de dados MySQL
-      volumes:
-      - name: mysql-data
-        persistentVolumeClaim:
-          claimName: mysql-data-pvc
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-persistent-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: longhorn
+      resources:
+        requests:
+          storage: 1Gi
 
 ---
-# Cria um PersistentVolumeClaim para o MySQL
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: wp-projeto
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:5.4-php7.2-apache
+        env:
+        - name: WORDPRESS_DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: wordpress-config
+              key: WORDPRESS_DB_USER
+        - name: WORDPRESS_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: wordpress-config
+              key: WORDPRESS_DB_NAME
+        - name: WORDPRESS_DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: wordpress-config
+              key: WORDPRESS_DB_HOST
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: wordpress-persistent-storage
+          mountPath: /var/www/html
+      volumes:
+      - name: wordpress-persistent-storage
+        persistentVolumeClaim:
+          claimName: wordpress-pvc
+
+---
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-data-pvc
+  name: wordpress-pvc
   namespace: wp-projeto
 spec:
-  storageClassName: longhorn
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteMany
+  storageClassName: longhorn
   resources:
     requests:
       storage: 1Gi
 
 ---
-# Cria um Secret para armazenar variáveis de ambiente sensíveis do Wordpress
+
 apiVersion: v1
-kind: Secret
+kind: Service
 metadata:
-  name: wordpress-env
+  name: wordpress-service
   namespace: wp-projeto
-type: Opaque
-data:
-  WORDPRESS_DB_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
+spec:
+  selector:
+    app: wordpress
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
 
 ---
-# Cria um Secret para armazenar variáveis de ambiente sensíveis do MySQL
+
 apiVersion: v1
-kind: Secret
+kind: Service
 metadata:
-  name: mysql-env
+  name: mysql-service
   namespace: wp-projeto
-type: Opaque
-data:
-  MYSQL_ROOT_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
-  MYSQL_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
+spec:
+  clusterIP: None
+  selector:
+    app: mysql
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
 
 ---
-# Cria um ConfigMap para armazenar variáveis de configuração do Wordpress
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: wordpress-config
-  namespace: wp-projeto
-data:
-  WORDPRESS_DB_USER: wordpress
-  WORDPRESS_DB_NAME: wordpress
-  WORDPRESS_DB_HOST: mysql.wp-projeto.svc.cluster.local
 
----
-# Cria um ConfigMap para armazenar variáveis de configuração do MySQL
-apiVersion: v1
-kind: Config
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: wp-projeto
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: wordpress.sslip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wordpress-service
+            port:
+              number: 80
