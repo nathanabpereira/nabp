@@ -34,8 +34,8 @@ metadata:
   namespace: wp-projeto
 type: Opaque
 data:
-  MYSQL_PASSWORD: XNzd29yZeyJwzc3dvcmQifQ=ZXJXaXRoUvcm
-  MYSQL_ROOT_PASSWORD: XNzd29yZeyJwzc3dvcmQifQ=ZXJXaXRoUvcm
+  MYSQL_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
+  MYSQL_ROOT_PASSWORD: eyJwYXNzd29yZCI6ImZvcmV2ZXJXaXRoUGFzc3dvcmQifQ==
 
 ---
 
